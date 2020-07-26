@@ -109,6 +109,7 @@ def setup_port(conn, node):
         sys.exit(1)
 
     mac = ports[0]["address"]
+    print(mac)
 
     existing_ports = list(conn.network.ports(mac_address=mac))
     if existing_ports:
@@ -126,18 +127,17 @@ def setup_port(conn, node):
     dhcp_extras = [
         {
             'opt_name': 'tag:ipxe,67',
-            'opt_value': 'http://10.225.1.1:8089/inspector.ipxe',
-            #'opt_value': 'http://10.225.1.1:8089/arcus.ipxe',
+            'opt_value': 'http://10.5.1.0:8089/inspector.ipxe',
             'ip_version': 4
         },
         {
             'opt_name': '66',
-            'opt_value': '10.225.1.1',
+            'opt_value': '10.5.1.0',
             'ip_version': 4
         },
         {
             'opt_name': '150',
-            'opt_value': '10.225.1.1',
+            'opt_value': '10.5.1.0',
             'ip_version': 4
         },
         {
@@ -147,13 +147,15 @@ def setup_port(conn, node):
         },
         {
             'opt_name': 'server-ip-address',
-            'opt_value': '10.225.1.1',
+            'opt_value': '10.5.1.0',
             'ip_version': 4
         },
     ]
+
     port = conn.network.create_port(
         name=f'{node["name"]}-pxe', mac_address=mac,
-        network_id="fa913866-b115-49db-8198-dee31461628d",
+        fixed_ips=[{"ip_address": node["extra"]["pxe_bootstrap_ip"] , 'subnet_id': "eb25ed38-500f-4fea-9f59-050aaf7e8c6d"}],
+        network_id="a3f46e1f-476c-439a-ad7f-08d4f238c5dd",
         extra_dhcp_opts=dhcp_extras,
     )
     conn.network.set_tags(port, ["pxe-bootstrap"])
@@ -194,9 +196,9 @@ def test_inspector_pxe_boot(conn):
     #    print("Bailing out: node not found")
     #    sys.exit(1)
 
-    nodes = ironic_drac_settings.get_nodes_in_rack(conn, "DR06")
+    nodes = ironic_drac_settings.get_nodes_in_rack(conn, "AR04")
     #nodes = nodes[0:2]
-    print(len(nodes))
+    print("Nodes testing Inspector PXE boot with: ",len(nodes))
 
     pending = []
     for node in nodes:
@@ -212,7 +214,7 @@ def test_inspector_pxe_boot(conn):
 
         # Setup dhcp to hand out boot
         port = setup_port(conn, node)
-        print(port)
+        print(node["name"], port)
 
         # Ask for power on, if not already
         # TODO: better handle nodes that are already turned on?
@@ -237,7 +239,7 @@ def test_inspector_pxe_boot(conn):
 
 
 def inspect_nodes(conn, target_stage="inspect_1GbE", initial_stage=None):
-    nodes = ironic_drac_settings.get_nodes_in_rack(conn, "DR06")
+    nodes = ironic_drac_settings.get_nodes_in_rack(conn, "AR04")
 
     inspecting = []
     for node in nodes:
@@ -292,7 +294,7 @@ def inspect_nodes(conn, target_stage="inspect_1GbE", initial_stage=None):
 
 
 def get_inspection_data(conn):
-    nodes = ironic_drac_settings.get_nodes_in_rack(conn, "DR06")
+    nodes = ironic_drac_settings.get_nodes_in_rack(conn, "AR04")
 
     result = []
     for raw_node in nodes:
@@ -425,7 +427,7 @@ def get_inspection_data(conn):
 
     import csv
     nodes = {}
-    with open("DR06.csv") as csvfile:
+    with open("AR04.csv") as csvfile:
         rows = csv.DictReader(csvfile)
         for row in rows:
             nodes[row["name"]] = row
@@ -444,7 +446,7 @@ def get_inspection_data(conn):
             #print("50 expected: " + expected['sn3700c_port'] + " found: " + inspected['sn3700c_port'])
 
 def request_hse_boot(conn):
-    nodes = ironic_drac_settings.get_nodes_in_rack(conn, "DR06")
+    nodes = ironic_drac_settings.get_nodes_in_rack(conn, "AR04")
 
     clients = {}
     for node in nodes:
@@ -573,7 +575,7 @@ def manual_setup_port_inspection(conn, node):
 
 
 def boot_on_cleaning_net(conn):
-    nodes = ironic_drac_settings.get_nodes_in_rack(conn, "DR06")
+    nodes = ironic_drac_settings.get_nodes_in_rack(conn, "AR04")
     nodes = nodes[1:2]
     print(nodes[0])
     exit(-1)
@@ -587,7 +589,7 @@ def boot_on_cleaning_net(conn):
 
 
 def set_expected_bios_version(conn, version="2.5.4"):
-    nodes = ironic_drac_settings.get_nodes_in_rack(conn, "DR06")
+    nodes = ironic_drac_settings.get_nodes_in_rack(conn, "AR04")
 
     for node in nodes:
         vendor = node["extra"].get("system_vendor")
@@ -606,7 +608,7 @@ def set_expected_bios_version(conn, version="2.5.4"):
 
 
 def reset_after_failed_clean(conn):
-    nodes = ironic_drac_settings.get_nodes_in_rack(conn, "DR06")
+    nodes = ironic_drac_settings.get_nodes_in_rack(conn, "AR04")
 
     pending = []
     for node in nodes:
@@ -625,7 +627,7 @@ def reset_after_failed_clean(conn):
 
 
 def move_back_to_manageable(conn):
-    nodes = ironic_drac_settings.get_nodes_in_rack(conn, "DR06")
+    nodes = ironic_drac_settings.get_nodes_in_rack(conn, "AR04")
 
     pending = []
     for node in nodes:
@@ -640,7 +642,7 @@ def move_back_to_manageable(conn):
 
 
 def move_to_available(conn):
-    nodes = ironic_drac_settings.get_nodes_in_rack(conn, "DR06")
+    nodes = ironic_drac_settings.get_nodes_in_rack(conn, "AR04")
 
     pending = []
     for node in nodes:
@@ -683,9 +685,9 @@ def move_to_available(conn):
 
 
 if __name__ == "__main__":
-    openstack.enable_logging(True, stream=sys.stdout)
+    #openstack.enable_logging(True, stream=sys.stdout)
     conn = openstack.connection.from_config(cloud="arcus", debug=False)
-    #test_inspector_pxe_boot(conn)
+    test_inspector_pxe_boot(conn)
     #inspect_nodes(conn)
     #get_inspection_data(conn)
     #request_hse_boot(conn)
@@ -694,4 +696,4 @@ if __name__ == "__main__":
     #set_expected_bios_version(conn)  #TODO: new inspection rule should do that
     #move_to_available(conn)
     #reset_after_failed_clean(conn)
-    move_back_to_manageable(conn)
+    #move_back_to_manageable(conn)
