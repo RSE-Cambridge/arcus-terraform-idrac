@@ -49,8 +49,9 @@ def update_settings(client, bios_settings=None, idrac_settings=None):
           "SetBootOrderFqdd3": "",
           #"SetBootOrderFqdd4": "InfiniBand.Slot.4-2",
           "SetBootOrderFqdd4": "",
+          "SerialPortAddress": "Com2",
           #"EmbNic1": "DisabledOs",
-          "EmbNic1": "Enabled", # this is the default
+          "EmbNic1": "Enabled" # this is the default
         }
     bios_result = None
     if bios_settings:
@@ -59,7 +60,14 @@ def update_settings(client, bios_settings=None, idrac_settings=None):
 
     if idrac_settings is None:
         idrac_settings = {
+#          "NIC.1#DNSRacName": name,
+          "Time.1#Timezone": "Europe/London",
           "IPMILan.1#Enable": "Enabled",
+          "NTPConfigGroup.1#NTPEnable": "Enabled",
+          "NTPConfigGroup.1#NTP1": "10.45.255.49"
+# This will interrupt ws-man connection, so perhaps do this at a later stag
+#          "NIC.1#VLanEnable": "Enabled",
+#          "NIC.1#VLanID": "45"
         }
     idrac_result = None
     if idrac_settings: 
@@ -106,7 +114,7 @@ def find_idrac_ports(conn):
             "name": raw_port["name"],
             "mac": raw_port["mac_address"],
             "ip": raw_port["fixed_ips"][0]["ip_address"],
-            "rack": [tag for tag in raw_port["tags"] if "DR" in tag][0],
+            "rack": [tag for tag in raw_port["tags"] if "AR" in tag][0],
             "datacentre": [tag for tag in raw_port["tags"] if "DC" in tag][0],
         }
         for raw_port in conn.network.ports(tags="iDRAC")]
@@ -116,37 +124,48 @@ def get_nodes_in_rack(conn, rack_name):
     ips = [idrac["ip"] for idrac in find_idrac_ports(conn)
            if idrac["rack"] == rack_name]
     expected_node_count = len(ips)
+    print("Expected node count: ",expected_node_count)
 
     all_nodes = conn.baremetal.nodes(details=True)
     nodes = []
     for node in all_nodes:
-        if node["driver_info"]["drac_address"] in ips:
-            nodes.append(node)
+        #pprint.pprint(node)
+        try:
+            if node["driver_info"]["drac_address"] in ips and node["extra"]["rack"] == rack_name:
+               nodes.append(node)
+        except KeyError:
+            print("Node %s contains no drac_address driver_info, skipping" % node["name"])
+    print("Found node count: ", len(nodes))
     if len(nodes) != expected_node_count:
-        print("unable to find all nodes")
+        print("Unable to find all expected nodes")
         exit(-1)
-    print("found all nodes")
+    print("Found all expected nodes")
     return nodes
 
 
 if __name__ == "__main__":
-    openstack.enable_logging(True, stream=sys.stdout)
+    #openstack.enable_logging(True, stream=sys.stdout)
     conn = openstack.connection.from_config(cloud="arcus", debug=True)
 
-    nodes = get_nodes_in_rack(conn, "DR06")
+    rack_name = "AR04"
+    nodes = get_nodes_in_rack(conn, rack_name)
 
+    # Suppress certificate warnings for now
+    import urllib3
+    urllib3.disable_warnings()
+   
     clients = {}
     for node in nodes:
         ip = node["driver_info"]["drac_address"]
         name = node["name"]
+        print(name)
         client = dracclient.client.DRACClient(
             host=ip,
             username="root",
             password="calvin")
-        print(json.dumps(get_all_settings(client), indent=2))
-        exit(0)
+        #print(json.dumps(get_all_settings(client), indent=2))
         print("Try BIOS Update for " + ip + " " + name)
-        #update_settings(client)
+        update_settings(client)
         print("Submitted BIOS Update for " + ip + " " + name)
         clients[name] = client
 
