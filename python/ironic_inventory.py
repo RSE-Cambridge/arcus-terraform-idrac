@@ -24,7 +24,7 @@ template_str = """
 
 env = jinja2.Environment()
 template = env.from_string(template_str)
-conn = openstack.connection.from_config(cloud="envvars", debug=True)
+conn = openstack.connection.from_config(cloud="arcus", debug=True)
 
 ports = find_ports(conn)
 
